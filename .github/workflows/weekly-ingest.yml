@@ -1,0 +1,90 @@
+# =============================================================================
+# VoC Intelligence Agent — Weekly Automated Pipeline
+# Runs every Sunday at midnight IST (18:30 UTC Saturday → Sunday)
+# =============================================================================
+
+name: Weekly VoC Intelligence Pipeline
+
+on:
+  schedule:
+    # Sunday midnight IST = Saturday 18:30 UTC
+    - cron: '30 18 * * 0'
+  workflow_dispatch:
+    # Allow manual trigger from GitHub Actions UI
+
+permissions:
+  contents: write
+
+jobs:
+  voc-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      # ── 1. Checkout repository ──────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Set up Python ────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      # ── 3. Install dependencies ─────────────────────────────────
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # ── 4. Create .env from GitHub Secrets ──────────────────────
+      - name: Create .env file
+        run: |
+          cat > .env << EOF
+          SCRAPER_API_KEY=${{ secrets.SCRAPER_API_KEY }}
+          GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
+          MASTER_BUDS_1_AMAZON_URL=${{ secrets.MASTER_BUDS_1_AMAZON_URL }}
+          MASTER_BUDS_MAX_AMAZON_URL=${{ secrets.MASTER_BUDS_MAX_AMAZON_URL }}
+          MASTER_BUDS_1_FLIPKART_URL=${{ secrets.MASTER_BUDS_1_FLIPKART_URL }}
+          MASTER_BUDS_MAX_FLIPKART_URL=${{ secrets.MASTER_BUDS_MAX_FLIPKART_URL }}
+          DB_PATH=./db.sqlite
+          EOF
+
+      # ── 5. Run the full pipeline ────────────────────────────────
+      - name: Run VoC pipeline (ingest → analyze → report)
+        run: python agent.py --pipeline --max-pages 10
+
+      # ── 6. Upload reports as artifacts ──────────────────────────
+      - name: Upload reports and logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: voc-reports-${{ github.run_number }}
+          path: |
+            reports/global_actions.md
+            reports/weekly_delta.md
+            logs/delta_log.json
+          retention-days: 90
+
+      # ── 7. Commit updated DB and reports back to repo ───────────
+      - name: Commit results to repository
+        run: |
+          git config user.email "voc-agent@github-actions.com"
+          git config user.name "VoC Agent (Autonomous)"
+          git add db.sqlite logs/delta_log.json reports/ || true
+          DATE=$(date -u +"%Y-%m-%d")
+          git diff --staged --quiet || git commit -m "🤖 Weekly VoC run: ${DATE}"
+          git push || echo "Nothing to push"
+
+# =============================================================================
+# SETUP INSTRUCTIONS:
+# Before the first run, add these secrets in your GitHub repository:
+#   GitHub → Settings → Secrets and variables → Actions → New repository secret
+#
+#   SCRAPER_API_KEY            Your ScraperAPI key (https://www.scraperapi.com)
+#   GROQ_API_KEY               Your Groq API key (https://console.groq.com)
+#   MASTER_BUDS_1_AMAZON_URL   Amazon product reviews URL for Master Buds 1
+#   MASTER_BUDS_MAX_AMAZON_URL Amazon product reviews URL for Master Buds Max
+#   MASTER_BUDS_1_FLIPKART_URL Flipkart product URL for Master Buds 1
+#   MASTER_BUDS_MAX_FLIPKART_URL Flipkart product URL for Master Buds Max
+# =============================================================================
