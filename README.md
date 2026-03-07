@@ -104,7 +104,7 @@ voc-agent/
    ```
 2. **Clone this repository:**
    ```bash
-   git clone https://github.com/yourusername/voc-agent.git
+   git clone https://github.com/rizzhubsane/voc-agent.git
    cd voc-agent
    ```
 3. **Install Python Tools:**
@@ -204,6 +204,17 @@ CREATE TABLE ingestion_log (
 
 ---
 
+## 🎯 Finalised Product Portfolio
+
+The agent currently monitors and analyzes the following flagship products. Data is refreshed weekly across Amazon and Flipkart.
+
+| Product | Total Reviews | Avg Rating | Top Themes | Top Complaint |
+|---------|---------------|------------|------------|---------------|
+| **Master Buds 1** | 125 | 3.9/5 | Sound Quality (76%+) | Build Quality |
+| **Master Buds Max** | 100 | 4.0/5 | Comfort & Fit (86%+) | Price & Value |
+
+---
+
 ## 📊 Report Outputs
 
 The agent generates two primary files into the `reports/` folder:
@@ -260,7 +271,7 @@ All ingested data is sourced strictly from publicly available anonymized product
 ## 📁 Deliverables Checklist
 
 - [x] Code Repository (this repo)
-- [x] `README.md` (this file)
+- [x] `README.md` (this file updated with finalised product properties)
 - [x] `SOUL.md` (agent identity configuration)
 - [x] `db.sqlite` (initial populated database)
 - [x] `logs/delta_log.json` (Proof verifying delta duplication catches)
