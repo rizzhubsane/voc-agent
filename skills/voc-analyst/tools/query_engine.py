@@ -33,6 +33,26 @@ def _get_client():
     return Groq(api_key=GROQ_API_KEY)
 
 
+def _load_reports() -> str:
+    """Load latest global and weekly reports for additional context."""
+    reports_text = ""
+    project_root = Path(__file__).resolve().parent.parent.parent.parent
+    reports_dir = project_root / "reports"
+    
+    report_files = ["global_actions.md", "weekly_delta.md"]
+    
+    for filename in report_files:
+        path = reports_dir / filename
+        if path.exists():
+            try:
+                content = path.read_text(encoding="utf-8")
+                reports_text += f"\n--- {filename} ---\n{content}\n"
+            except Exception as e:
+                logger.warning(f"Could not read {filename}: {e}")
+                
+    return reports_text.strip()
+
+
 def _generate_sql(question: str) -> str:
     """Use Groq to translate the question into a valid SQLite query."""
     system_prompt = (
@@ -96,24 +116,25 @@ def _generate_sql(question: str) -> str:
     return sql
 
 
-def _summarize_results(question: str, sql: str, results: list[dict]) -> str:
-    """Use Groq to generate a human-readable summary of the SQL results."""
+def _summarize_results(question: str, sql: str, results: list[dict], reports_context: str = "") -> str:
+    """Use Groq to generate a human-readable summary of the SQL results and reports context."""
     system_prompt = (
         "You are Molly, a Voice of Customer (VoC) Intelligence Analyst. "
-        "Answer the user's question grounded EXACTLY in the provided database results.\n\n"
+        "Answer the user's question grounded in the provided database results AND the generated report summaries.\n\n"
         "RULES:\n"
         "1. ALWAYS cite specific numbers (review counts, average ratings, products).\n"
-        "2. If the data shows quotes/titles, use them as evidence.\n"
-        "3. Keep it professional, concise, and direct.\n"
-        "4. If the data is empty, say 'I could not find any data matching your request.'\n"
-        "5. ONLY USE THE PROVIDED DATA. Do not hallucinate."
+        "2. Use the provided 'Generated Reports Context' to answer questions about 'action items', 'marketing', 'product', or 'support' teams.\n"
+        "3. If the user asks a question handled by the reports (e.g. action items) rather than the database, prioritize the report info.\n"
+        "4. Keep it professional, concise, and direct.\n"
+        "5. If both database and report data are empty/irrelevant, say 'I could not find any information matching your request.'\n"
+        "6. ONLY USE THE PROVIDED DATA. Do not hallucinate."
     )
 
     user_prompt = (
         f"Question: {question}\n\n"
-        f"Executed SQL Query:\n{sql}\n\n"
-        f"Database Results (Max 50 rows shown):\n"
-        f"{json.dumps(results[:50], indent=2)}"
+        f"Executed SQL Query (Database Results):\n{sql}\n\n"
+        f"Database Results:\n{json.dumps(results[:50], indent=2)}\n\n"
+        f"Generated Reports Context (Action Items & Summaries):\n{reports_context}"
     )
 
     if not GROQ_API_KEY or GROQ_API_KEY.startswith("your_"):
@@ -179,9 +200,10 @@ def query_engine_run(question: str) -> dict:
         return {"sql": sql, "error": f"SQLite error: {results[0]['error']}"}
 
     # 3. Summarize
-    logger.info("Summarizing %d rows of results...", len(results))
+    reports_text = _load_reports()
+    logger.info("Summarizing %d rows of results with report context...", len(results))
     try:
-        summary = _summarize_results(question, sql, results)
+        summary = _summarize_results(question, sql, results, reports_text)
     except Exception as exc:
         return {"sql": sql, "raw_results": results, "error": f"Failed to summarize: {exc}"}
 

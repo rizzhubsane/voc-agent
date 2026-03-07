@@ -36,6 +36,7 @@ from report import (  # noqa: E402
     generate_delta_report,
     save_delta_log,
 )
+from slack import send_slack_message  # noqa: E402
 from query_engine import query_engine_run  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -163,6 +164,18 @@ def cmd_report():
     delta_path = generate_delta_report()
     print(f"    ✅ Saved to: {delta_path}")
 
+    print("  → Sending weekly delta report to Slack…")
+    try:
+        with open(delta_path, "r", encoding="utf-8") as f:
+            report_text = f.read()
+        slack_success = send_slack_message(report_text)
+        if slack_success:
+            print("    ✅ Slack message sent successfully")
+        else:
+            print("    ⏭️  Slack message skipped (webhook not set or failed)")
+    except Exception as e:
+        print(f"    ❌ Failed to send Slack message: {e}")
+
     print("\n📊 Reports saved to reports/")
     print("=" * 60)
 
@@ -256,6 +269,121 @@ def cmd_query(question: str):
     print(f"{wrapped}")
 
     print("\n" + "=" * 60)
+
+
+# ---------------------------------------------------------------------------
+# Command: --chat
+# ---------------------------------------------------------------------------
+def cmd_chat():
+    """Interactive CLI loop for querying the database."""
+    print("\n" + "💬" * 30)
+    print("  Entering Interactive VoC Chat Mode")
+    print("  Type 'help' for commands. Type 'exit' to end.")
+    print("💬" * 30 + "\n")
+
+    initialize_db()
+
+    while True:
+        try:
+            user_input = input("\nMolly (VoC) > ").strip()
+            
+            if user_input.lower() in ("exit", "quit", "q"):
+                print("\nGoodbye!\n")
+                break
+                
+            if user_input.lower() in ("help", "/help", "?"):
+                print("\n  [Chat Commands]:")
+                print("  - exit, quit, q      : Exit the chat loop")
+                print("  - help, /help, ?     : Show this help message")
+                print("  - /ingest            : Scrape new reviews")
+                print("  - /analyze           : Run LLM analysis on new reviews")
+                print("  - /report            : Generate reports & send to Slack")
+                print("  - /pipeline          : Run full /ingest → /analyze → /report")
+                print("\n  [Data Queries]:")
+                print("  Type any natural language question to query the database! Examples:")
+                print("  - 'how many total reviews are there?'")
+                print("  - 'what are the biggest complaints for Master Buds Max?'")
+                print("  - 'show me the theme breakdown for battery issues'")
+                print("-" * 60)
+                continue
+                
+            if user_input.lower() == "/ingest":
+                cmd_ingest()
+                continue
+            elif user_input.lower() == "/analyze":
+                cmd_analyze()
+                continue
+            elif user_input.lower() == "/report":
+                cmd_report()
+                continue
+            elif user_input.lower() == "/pipeline":
+                cmd_pipeline()
+                continue
+
+            if not user_input:
+                continue
+
+            # Route immediately directly to query function reusing its display logic (or custom if needed)
+            # cmd_query uses a print header we might not want repeatedly, but it works.
+            # To keep it seamless, we'll inline the engine call similarly.
+            
+            result = query_engine_run(user_input)
+            
+            if "error" in result:
+                print(f"\n❌ Error: {result['error']}")
+                if "sql" in result:
+                    print(f"\n  Attempted SQL: {result['sql']}")
+                print("-" * 60)
+                continue
+
+            sql = result.get("sql", "")
+            data = result.get("raw_results", [])
+            summary = result.get("summary", "")
+
+            # Show SQL
+            print(f"\n  [SQL Executed]: {sql}")
+            
+            # Show raw data table
+            if not data:
+                print("\n  ℹ️  No matching reviews found in the database.")
+            else:
+                display_data = data[:5] # Limit slightly aggressively for chat loops
+                columns = list(display_data[0].keys())
+                widths = {col: max(len(str(col)), *(len(str(r.get(col, ""))) for r in display_data)) for col in columns}
+                widths = {c: min(w, 50) for c, w in widths.items()}
+
+                header = " | ".join(col.ljust(widths[col]) for col in columns)
+                separator = "-+-".join("-" * widths[col] for col in columns)
+                
+                print(f"\n  [Data Limit 5]:")
+                print(f"  {header}")
+                print(f"  {separator}")
+                for row in display_data:
+                    line_parts = []
+                    for col in columns:
+                        val = str(row.get(col, "")).replace("\n", " ")
+                        if len(val) > widths[col]:
+                            val = val[:widths[col]-3] + "..."
+                        line_parts.append(val.ljust(widths[col]))
+                    print(f"  {' | '.join(line_parts)}")
+                
+                if len(data) > 5:
+                    print(f"  ... (+ {len(data)-5} more rows)")
+
+            # Show Insight
+            print(f"\n  💡 Insight:\n")
+            import textwrap
+            wrapped = textwrap.fill(summary, width=80, initial_indent="  ", subsequent_indent="  ")
+            print(f"{wrapped}\n")
+            print("-" * 60)
+
+        except KeyboardInterrupt:
+            print("\nGoodbye!\n")
+            break
+        except Exception as e:
+            print(f"\n❌ Unexpected error: {e}")
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -403,6 +531,7 @@ Examples:
   python agent.py --analyze                   Run LLM sentiment/theme analysis
   python agent.py --report                    Generate action reports
   python agent.py --pipeline                  Full run: ingest → analyze → report
+  python agent.py --chat                      Enter interactive chat loop
   python agent.py --query "compare products"  Ask a question about the data
   python agent.py --query "top complaints"    Find most common issues
   python agent.py --query "battery issues"    Search by theme
@@ -428,6 +557,11 @@ Examples:
         "--pipeline",
         action="store_true",
         help="Run full autonomous pipeline: ingest → analyze → report",
+    )
+    parser.add_argument(
+        "--chat",
+        action="store_true",
+        help="Start an interactive chat loop to query the data",
     )
     parser.add_argument(
         "--query",
@@ -479,7 +613,7 @@ Examples:
     # Must specify at least one command
     has_cmd = any([
         args.ingest, args.analyze, args.report, args.pipeline,
-        args.query, args.stats,
+        args.chat, args.query, args.stats,
         args.mock_ingest, args.mock_analyze, args.mock_pipeline,
     ])
     if not has_cmd:
@@ -501,6 +635,8 @@ Examples:
         cmd_analyze(batch_size=args.batch_size)
     elif args.report:
         cmd_report()
+    elif args.chat:
+        cmd_chat()
     elif args.query:
         cmd_query(args.query)
     elif args.stats:
