@@ -386,5 +386,27 @@
     },
     "total_new": 0,
     "total_in_db": 225
+  },
+  {
+    "run_date": "2026-06-21",
+    "run_timestamp": "2026-06-21T20:11:32.696415",
+    "products": {
+      "master_buds_1": {
+        "new_reviews": 0,
+        "sources": {
+          "amazon": 0,
+          "flipkart": 0
+        }
+      },
+      "master_buds_max": {
+        "new_reviews": 0,
+        "sources": {
+          "amazon": 0,
+          "flipkart": 0
+        }
+      }
+    },
+    "total_new": 0,
+    "total_in_db": 225
   }
 ]
