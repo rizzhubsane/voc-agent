@@ -1,4 +1,4 @@
-# 📬 VoC Weekly Delta Report — Week of 2026-08-09
+# 📬 VoC Weekly Delta Report — Week of 2026-08-16
 **New Reviews This Week:** 0  
 **Compared to last week:** N/A (no previous week data)  
 
@@ -21,4 +21,4 @@ New reviews: 0 | Avg rating: 0.0/5
 Top themes this week: No analysed data yet
 
 ---
-*Delta period: 2026-08-09 to 2026-08-16 | Generated autonomously by Molly*
+*Delta period: 2026-08-16 to 2026-08-23 | Generated autonomously by Molly*
